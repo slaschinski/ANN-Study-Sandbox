@@ -13,7 +13,7 @@ public class ANN {
         this.numInputs = numberOfInputs;
     }
 
-    public void AddLayer(int numberOfNeurons)
+    public void AddLayer(int numberOfNeurons, string activationFunction)
     {
         int numberOfInputs;
         if (layers.Count == 0)
@@ -24,7 +24,7 @@ public class ANN {
         {
             numberOfInputs = layers[layers.Count - 1].neurons.Count;
         }
-        layers.Add(new Layer(numberOfNeurons, numberOfInputs));
+        layers.Add(new Layer(numberOfNeurons, numberOfInputs, activationFunction));
     }
 
 
@@ -63,14 +63,7 @@ public class ANN {
                 }
 
                 dotProduct += layers[i].neurons[j].bias;
-                if (i == (layers.Count - 1))
-                {
-                    layers[i].neurons[j].output = Sigmoid(dotProduct);
-                }
-                else
-                {
-                    layers[i].neurons[j].output = ActivationFunction(dotProduct);
-                }
+                layers[i].neurons[j].output = ActivationFunction(dotProduct, layers[i].activationFunction);
                 outputs.Add(layers[i].neurons[j].output);
             }
         }
@@ -127,11 +120,24 @@ public class ANN {
         }
     }
 
-    private double ActivationFunction(double dotProduct)
+    private double ActivationFunction(double dotProduct, string activationFunction)
     {
-        //return Step(dotProduct);
-        return Sigmoid(dotProduct);
-        //return ReLU(dotProduct);
+        switch (activationFunction)
+        {
+            case "Linear":
+                return Linear(dotProduct);
+            case "ReLU":
+                return ReLU(dotProduct);
+            case "Sigmoid":
+                return Sigmoid(dotProduct);
+            case "Step":
+                return Step(dotProduct);
+            case "TanH":
+                return TanH(dotProduct);
+            default:
+                Debug.LogError("Unknown activation function used!");
+                return 0;
+        }
     }
 
     private double Step(double value)
@@ -142,11 +148,21 @@ public class ANN {
 
     private double Sigmoid(double value)
     {
-        return 1.0f / (1.0f + System.Math.Exp(-value));
+        return 1.0f / (1.0f + (double)System.Math.Exp(-value));
+    }
+
+    double TanH(double value)
+    {
+        return 2.0f / (1.0f + (double)System.Math.Exp(-2.0f * value)) - 1.0f;
     }
 
     private double ReLU(double x)
     {
-        return System.Math.Max(0, x);// x < 0 ? 0 : x;
+        return System.Math.Max(0, x); // x < 0 ? 0 : x;
+    }
+
+    private double Linear(double value)
+    {
+        return value;
     }
 }

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Brain : MonoBehaviour {
+public class XORBrain : MonoBehaviour {
 
     ANN ann;
     double sumSquareError = 0;
@@ -10,12 +10,12 @@ public class Brain : MonoBehaviour {
 	// Use this for initialization
 	void Start () {
         ann = new ANN(2);
-        ann.AddLayer(2);
-        ann.AddLayer(1);
+        ann.AddLayer(2, "Sigmoid");
+        ann.AddLayer(1, "Sigmoid");
 
         List<double> result;
 
-        for(int i = 0; i < 1000; i++)
+        for(int i = 0; i < 10000; i++)
         {
             sumSquareError = 0;
             result = Train(1, 1, 0);
