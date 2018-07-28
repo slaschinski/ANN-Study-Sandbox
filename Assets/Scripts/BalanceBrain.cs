@@ -7,16 +7,18 @@ public class Replay
 {
     public List<double> states;
     public double reward;
+    public int actionX;
+    public int actionZ;
 
     public Replay(
         double xr,
         double zr,
         double ballx,
-        double bally,
         double ballz,
         double ballvx,
-        double ballvy,
         double ballvz,
+        int iX,
+        int iZ,
         double r
         )
     {
@@ -24,11 +26,11 @@ public class Replay
         states.Add(xr);
         states.Add(zr);
         states.Add(ballx);
-        states.Add(bally);
         states.Add(ballz);
         states.Add(ballvx);
-        states.Add(ballvy);
         states.Add(ballvz);
+        actionX = iX;
+        actionZ = iZ;
         reward = r;
     }
 }
@@ -36,6 +38,7 @@ public class Replay
 public class BalanceBrain : MonoBehaviour {
 
     public GameObject ball;
+    public Transform neuronPrefab;
 
     ANN ann;
 
@@ -43,11 +46,10 @@ public class BalanceBrain : MonoBehaviour {
     List<Replay> replayMemory = new List<Replay>();
     int mCapacity = 10000;
 
-    float discount = 0.9f;
+    float discount = 0.99f;
     float exploreRate = 100.0f;
-    float maxExploreRate = 100.0f;
     float minExploreRate = 0.01f;
-    float exploreDecay = 0.001f;
+    float exploreDecay = 0.9995f;
 
     Vector3 ballStartPos;
     int failCount = 0;
@@ -60,12 +62,16 @@ public class BalanceBrain : MonoBehaviour {
 
 
     List<double> qs = new List<double>();
+    List<double> qsX = new List<double>();
+    List<double> qsZ = new List<double>();
+    public int maxQIndexX = 0;
+    public int maxQIndexZ = 0;
 
     // Use this for initialization
     void Start () {
-        ann = new ANN(8);
+        ann = new ANN(6, true);
+        ann.AddLayer(32, "ReLU");
         ann.AddLayer(16, "ReLU");
-        ann.AddLayer(8, "ReLU");
         ann.AddLayer(4, "Sigmoid");
 
         ballStartPos = ball.transform.position;
@@ -86,21 +92,41 @@ public class BalanceBrain : MonoBehaviour {
         GUI.Label(new Rect(10, 125, 500, 30), "Reward: " + totalReward, guiStyle);
         GUI.EndGroup();
 
-        GUI.BeginGroup(new Rect(Screen.width-310, 10, 300, 350));
+        GUI.BeginGroup(new Rect(Screen.width-310, 10, 300, 450));
         GUI.Box(new Rect(0, 0, 140, 140), "Input", guiStyle);
         GUI.Label(new Rect(10, 25, 200, 30), "Plane X: " + this.transform.rotation.x, guiStyle);
         GUI.Label(new Rect(10, 50, 200, 30), "Plane Z: " + this.transform.rotation.z, guiStyle);
         GUI.Label(new Rect(10, 75, 200, 30), "Ball Pos X: " + ball.transform.position.x, guiStyle);
-        GUI.Label(new Rect(10, 100, 200, 30), "Ball Pos Y: " + ball.transform.position.y, guiStyle);
-        GUI.Label(new Rect(10, 125, 200, 30), "Ball Pos Z: " + ball.transform.position.z, guiStyle);
-        GUI.Label(new Rect(10, 150, 200, 30), "Ball Vel X: " + ball.GetComponent<Rigidbody>().velocity.x, guiStyle);
-        GUI.Label(new Rect(10, 175, 200, 30), "Ball Vel Y: " + ball.GetComponent<Rigidbody>().velocity.y, guiStyle);
-        GUI.Label(new Rect(10, 200, 200, 30), "Ball Vel Z: " + ball.GetComponent<Rigidbody>().velocity.z, guiStyle);
+        GUI.Label(new Rect(10, 100, 200, 30), "Ball Pos Z: " + ball.transform.position.z, guiStyle);
+        GUI.Label(new Rect(10, 125, 200, 30), "Ball Vel X: " + ball.GetComponent<Rigidbody>().velocity.x, guiStyle);
+        GUI.Label(new Rect(10, 150, 200, 30), "Ball Vel Z: " + ball.GetComponent<Rigidbody>().velocity.z, guiStyle);
         GUI.Box(new Rect(0, 225, 140, 140), "Output", guiStyle);
-        GUI.Label(new Rect(10, 250, 200, 30), "0: " + BarDiagram(qs[0]), guiStyle);
-        GUI.Label(new Rect(10, 275, 200, 30), "1: " + BarDiagram(qs[1]), guiStyle);
-        GUI.Label(new Rect(10, 300, 200, 30), "2: " + BarDiagram(qs[2]), guiStyle);
-        GUI.Label(new Rect(10, 325, 200, 30), "3: " + BarDiagram(qs[3]), guiStyle);
+
+        if (maxQIndexX == 0)
+        {
+            guiStyle.normal.textColor = Color.yellow;
+        }
+        GUI.Label(new Rect(10, 250, 200, 30), "X+: " + BarDiagram(qsX[0]), guiStyle);
+        guiStyle.normal.textColor = Color.white;
+        if (maxQIndexX == 1)
+        {
+            guiStyle.normal.textColor = Color.yellow;
+        }
+        GUI.Label(new Rect(10, 275, 200, 30), "X-:  " + BarDiagram(qsX[1]), guiStyle);
+        guiStyle.normal.textColor = Color.white;
+        if (maxQIndexZ == 2)
+        {
+            guiStyle.normal.textColor = Color.yellow;
+        }
+        GUI.Label(new Rect(10, 300, 200, 30), "Z+: " + BarDiagram(qsZ[0]), guiStyle);
+        guiStyle.normal.textColor = Color.white;
+        if (maxQIndexZ == 3)
+        {
+            guiStyle.normal.textColor = Color.yellow;
+        }
+        GUI.Label(new Rect(10, 325, 200, 30), "Z-:  " + BarDiagram(qsZ[1]), guiStyle);
+        guiStyle.normal.textColor = Color.white;
+
         GUI.EndGroup();
     }
 
@@ -108,7 +134,7 @@ public class BalanceBrain : MonoBehaviour {
     void Update () {
         if (Input.GetKeyDown("space"))
         {
-            ResetBall();
+            ResetState();
         }
     }
 
@@ -120,57 +146,66 @@ public class BalanceBrain : MonoBehaviour {
         states.Add(this.transform.rotation.x);
         states.Add(this.transform.rotation.z);
         states.Add(ball.transform.position.x);
-        states.Add(ball.transform.position.y);
         states.Add(ball.transform.position.z);
         states.Add(ball.GetComponent<Rigidbody>().velocity.x);
-        states.Add(ball.GetComponent<Rigidbody>().velocity.y);
         states.Add(ball.GetComponent<Rigidbody>().velocity.z);
 
-        qs = SoftMax(ann.Predict(states));
-        double maxQ = qs.Max();
-        int maxQIndex = qs.ToList().IndexOf(maxQ);
-        exploreRate = Mathf.Clamp(exploreRate - exploreDecay, minExploreRate, maxExploreRate);
+        qsX.Clear();
+        qsZ.Clear();
+        qs = ann.Predict(states);
+        qsX.Add(qs[0]);
+        qsX.Add(qs[1]);
+        qsZ.Add(qs[2]);
+        qsZ.Add(qs[3]);
+        qsX = SoftMax(qsX);
+        qsZ = SoftMax(qsZ);
+        double maxQX = qsX.Max();
+        double maxQZ = qsZ.Max();
+        maxQIndexX = qsX.ToList().IndexOf(maxQX);
+        maxQIndexZ = qsZ.ToList().IndexOf(maxQZ) + 2;
 
         if (Random.Range(1, 100) < exploreRate)
         {
-            maxQIndex = Random.Range(0, 4);
+            maxQIndexX = Random.Range(0, 2);
+            maxQIndexZ = Random.Range(2, 4);
         }
 
-        if (maxQIndex == 0)
+        if (maxQIndexX == 0)
         {
-            transform.Rotate(Vector3.right, tiltSpeed * (float)qs[maxQIndex]);
+            transform.Rotate(Vector3.right, tiltSpeed); //* (float)qs[maxQIndexX]);
         }
-        else if (maxQIndex == 1)
+        else //if (maxQIndexX == 1)
         {
-            transform.Rotate(Vector3.right, -tiltSpeed * (float)qs[maxQIndex]);
+            transform.Rotate(Vector3.right, -tiltSpeed); //* (float)qs[maxQIndexX]);
         }
-        else if (maxQIndex == 2)
+
+        if (maxQIndexZ == 2)
         {
-            transform.Rotate(Vector3.forward, tiltSpeed * (float)qs[maxQIndex]);
+            transform.Rotate(Vector3.forward, tiltSpeed); //* (float)qs[maxQIndexZ]);
         }
-        else //if (maxQIndex == 3)
+        else //if (maxQIndexZ == 3)
         {
-            transform.Rotate(Vector3.forward, -tiltSpeed * (float)qs[maxQIndex]);
+            transform.Rotate(Vector3.forward, -tiltSpeed); //* (float)qs[maxQIndexZ]);
         }
 
         if (ball.GetComponent<BallState>().dropped)
         {
-            reward = -1.0f;
+            reward = -1.0f;// - ball.GetComponent<Rigidbody>().velocity.magnitude;
         }
         else
         {
-            reward = 0.1f;
+            reward = 0.01f;
         }
         totalReward += reward;
 
         Replay lastMemory = new Replay(this.transform.rotation.x,
                                        this.transform.rotation.z,
                                        ball.transform.position.x,
-                                       ball.transform.position.y,
                                        ball.transform.position.z,
                                        ball.GetComponent<Rigidbody>().angularVelocity.x,
-                                       ball.GetComponent<Rigidbody>().angularVelocity.y,
                                        ball.GetComponent<Rigidbody>().angularVelocity.z,
+                                       maxQIndexX,
+                                       maxQIndexZ,
                                        reward);
 
         if (replayMemory.Count > mCapacity)
@@ -182,53 +217,117 @@ public class BalanceBrain : MonoBehaviour {
 
         if (ball.GetComponent<BallState>().dropped || replayMemory.Count > 1000)
         {
+            if (exploreRate > minExploreRate)
+            {
+                exploreRate *= exploreDecay;
+            }
+
+            /*int batchSize = 32;
+            if (replayMemory.Count < batchSize)
+            {
+                batchSize = replayMemory.Count;
+            }
+
+            List<int> samples = new List<int>();
+            while (samples.Count < batchSize)
+            {
+                int rand = Random.Range(0, replayMemory.Count);
+                if (!samples.Contains(rand))
+                {
+                    samples.Add(rand);
+                }
+            }
+
+            List<List<double>> batchInputs = new List<List<double>>();
+            List<List<double>> batchOutputs = new List<List<double>>();
+            */
+
+            //for (int samp = 0; samp < samples.Count; samp++)
             for (int i = replayMemory.Count - 1; i >= 0; i--)
             {
-                List<double> toutputsOld = new List<double>();
-                List<double> toutputsNew = new List<double>();
+                //int i = samples[samp];
 
-                toutputsOld = SoftMax(ann.Predict(replayMemory[i].states));
+                double feedbackX;
+                double feedbackZ;
 
-                double maxQOld = toutputsOld.Max();
-                int action = toutputsOld.ToList().IndexOf(maxQOld);
-
-                double feedback;
                 if (i == replayMemory.Count - 1 || replayMemory[i].reward == -1)
                 {
-                    feedback = replayMemory[i].reward;
+                    feedbackX = replayMemory[i].reward;
+                    feedbackZ = replayMemory[i].reward;
                 }
                 else
                 {
-                    toutputsNew = SoftMax(ann.Predict(replayMemory[i + 1].states));
-                    maxQ = toutputsNew.Max();
-                    feedback = (replayMemory[i].reward + discount * maxQ);
+                    List<double> toutputsNext = new List<double>();
+                    toutputsNext = ann.Predict(replayMemory[i + 1].states);
+                    //double maxQNext = toutputsNext.Max();
+                    List<double> toutputsNextX = new List<double>();
+                    List<double> toutputsNextZ = new List<double>();
+                    toutputsNextX.Add(toutputsNext[0]);
+                    toutputsNextX.Add(toutputsNext[1]);
+                    toutputsNextZ.Add(toutputsNext[2]);
+                    toutputsNextZ.Add(toutputsNext[3]);
+                    toutputsNextX = SoftMax(toutputsNextX);
+                    toutputsNextZ = SoftMax(toutputsNextZ);
+                    double maxQNextX = toutputsNextX.Max();
+                    double maxQNextZ = toutputsNextZ.Max();
+                    feedbackX = (replayMemory[i].reward + discount * maxQNextX);
+                    feedbackZ = (replayMemory[i].reward + discount * maxQNextZ);
                 }
 
-                toutputsOld[action] = feedback;
-                ann.Train(replayMemory[i].states, toutputsOld);
-            }
+                List<double> toutputsNow = new List<double>();
+                toutputsNow = ann.Predict(replayMemory[i].states);
+                List<double> toutputsNowOld = new List<double>(toutputsNow);
 
-            if (timer > maxBalanceTime)
+                List<double> toutputsNowX = new List<double>();
+                List<double> toutputsNowZ = new List<double>();
+                toutputsNowX.Add(toutputsNow[0]);
+                toutputsNowX.Add(toutputsNow[1]);
+                toutputsNowZ.Add(toutputsNow[2]);
+                toutputsNowZ.Add(toutputsNow[3]);
+                toutputsNowX = SoftMax(toutputsNowX);
+                toutputsNowZ = SoftMax(toutputsNowZ);
+
+
+                int actionNowX = replayMemory[i].actionX;
+                int actionNowZ = replayMemory[i].actionZ;
+
+                // thisQ = thisQ + learnRate * [thisReward + discount * nextQMax - thisQ];
+                //toutputsOld[action] = 0.5f * Mathf.Pow((float)(feedback - maxQOld), 2.0f);
+                toutputsNow[actionNowX] = toutputsNow[actionNowX] * (feedbackX - toutputsNowX[actionNowX]);
+                toutputsNow[actionNowZ] = toutputsNow[actionNowZ] * (feedbackZ - toutputsNowZ[actionNowZ - 2]);
+                ann.UpdateWeights(toutputsNowOld, toutputsNow);
+                //batchInputs.Add(replayMemory[i].states);
+                //batchOutputs.Add(toutputsNow);
+            }
+            //ann.TrainBatch(batchInputs, batchOutputs);
+
+
+            if (ball.GetComponent<BallState>().dropped)
             {
-                maxBalanceTime = timer;
+                if (timer > maxBalanceTime)
+                {
+                    maxBalanceTime = timer;
+                }
+
+                timer = 0;
+                totalReward = 0;
+
+                ResetState();
+                failCount++;
             }
-
-            timer = 0;
-            totalReward = 0;
-
-            ball.GetComponent<BallState>().dropped = false;
-            this.transform.rotation = Quaternion.identity;
-            ResetBall();
             replayMemory.Clear();
-            failCount++;
         }
     }
 
-    void ResetBall()
+    void ResetState()
     {
+        transform.rotation = Quaternion.identity;
+        transform.Rotate(Vector3.forward, Random.Range(-1.0f, 1.0f));
+        transform.Rotate(Vector3.right, Random.Range(-1.0f, 1.0f));
+        ball.GetComponent<BallState>().dropped = false;
         ball.transform.position = ballStartPos;
-        ball.transform.position += new Vector3(Random.Range(-2.0f, 2.0f), 0, Random.Range(-2.0f, 2.0f));
-        ball.GetComponent<Rigidbody>().velocity = new Vector3(0, 0, 0);
+        ball.transform.position += new Vector3(Random.Range(-1.0f, 1.0f), 0, Random.Range(-1.0f, 1.0f));
+        ball.GetComponent<Rigidbody>().velocity = new Vector3(0, 0, 0);  //new Vector3(Random.Range(-1.0f, 1.0f), 0, Random.Range(-1.0f, 1.0f));
         ball.GetComponent<Rigidbody>().angularVelocity = new Vector3(0, 0, 0);
     }
 
@@ -253,7 +352,7 @@ public class BalanceBrain : MonoBehaviour {
 
     string BarDiagram(double value)
     {
-        int bars = (int)Mathf.Ceil((float)value * 20.0f);
+        int bars = (int)Mathf.Ceil((float)value * 50.0f);
         string returnValue = "";
         for (int i = 0; i < bars; i++)
         {
@@ -261,4 +360,6 @@ public class BalanceBrain : MonoBehaviour {
         }
         return returnValue;
     }
+
+
 }
