@@ -4,23 +4,40 @@ using UnityEngine;
 
 public class Neuron
 {
-    public double bias;
     public string activationFunction;
-    public double output;
-    public double errorGradient;
-    public List<double> inputs = new List<double>();
-    public List<double> weights = new List<double>();
+    private List<double> inputs = new List<double>();
+    private List<double> weights = new List<double>();
+    private double bias;
+    private double dotProduct;
+    private double output;
+    private double errorGradient;
+    GameObject debugNeuron;
 
     // Initialize bias and weights with random values
-    public Neuron(int numberOfInputs, string activationFunction = "Sigmoid")
+    public Neuron(int numberOfInputs, int layerSize, string activationFunction = "Sigmoid", GameObject debugNeuron = null)
     {
+        this.debugNeuron = debugNeuron;
+
         for (int i = 0; i < numberOfInputs; i++)
         {
-            weights.Add(UnityEngine.Random.Range(-1.0f, 1.0f));
+            weights.Add(Random.Range(-1.0f, 1.0f));
+            //weights.Add(Random.Range(layerSize, numberOfInputs) * Mathf.Sqrt(2.0f / numberOfInputs));
+            //weights.Add(NextGaussian());
         }
-        bias = UnityEngine.Random.Range(-1.0f, 1.0f);
+        bias = Random.Range(-0.1f, 0.1f);
+
+        if (debugNeuron != null)
+        {
+            debugNeuron.GetComponent<DebugNeuron>().setWeights(weights);
+            debugNeuron.GetComponent<DebugNeuron>().setBiasColor(bias);
+        }
 
         this.activationFunction = activationFunction;
+    }
+
+    public List<double>getInputs()
+    {
+        return inputs;
     }
 
     public void setInputs(List<double> inputs)
@@ -31,9 +48,63 @@ public class Neuron
             this.inputs = new List<double>();
         }
         this.inputs = new List<double>(inputs);
+
+        if (debugNeuron != null)
+        {
+            debugNeuron.GetComponent<DebugNeuron>().setWeightedInputs(weights, inputs);
+        }
     }
 
-    public double CalculateOutput(List<double> inputs)
+    public List<double> getWeights()
+    {
+        return weights;
+    }
+
+    public void setWeights(List<double> newWeights)
+    {
+        if (newWeights.Count != weights.Count)
+        {
+            Debug.LogError("Number of weights should be " + weights.Count);
+        }
+        weights = new List<double>(newWeights);
+
+        if (debugNeuron != null)
+        {
+            debugNeuron.GetComponent<DebugNeuron>().setWeights(weights);
+        }
+    }
+
+    public double getBias()
+    {
+        return bias;
+    }
+
+    public void setBias(double bias)
+    {
+        this.bias = bias;
+
+        if (debugNeuron != null)
+        {
+            debugNeuron.GetComponent<DebugNeuron>().setBiasColor(bias);
+        }
+    }
+
+    public double getDotProduct()
+    {
+        return dotProduct;
+    }
+
+    public double getOutput()
+    {
+        return output;
+    }
+
+    public double getErrorGradient()
+    {
+        return errorGradient;
+    }
+
+    public double CalculateOutput()
     {
 
         if (inputs.Count == 0)
@@ -43,7 +114,8 @@ public class Neuron
             return output;
         }
 
-        double dotProduct = 0;
+        // lets start with the bias which should be added to the dot product
+        dotProduct = bias;
 
         // step through every input
         for (int i = 0; i < inputs.Count; i++)
@@ -51,28 +123,66 @@ public class Neuron
             // calculate the product and add it to the dot product
             dotProduct += weights[i] * inputs[i];
         }
-
-        // add bias to the calculated dot product
-        dotProduct += bias;
+        
         // use activate function depending on settings to calculate the output
-        output = ActivationFunction(dotProduct, activationFunction);
+        output = ActivationFunction(dotProduct);
+
+        if (debugNeuron != null)
+        {
+            debugNeuron.GetComponent<DebugNeuron>().setOutput((float)output);
+        }
         return output;
     }
 
-    private double ActivationFunction(double dotProduct, string activationFunction)
+    public void setErrorGradient(double errorGradient)
+    {
+        this.errorGradient = errorGradient;
+    }
+
+    public double CalculateErrorGradient(double error)
+    {
+        errorGradient = ActivationDerivative(dotProduct) * error;
+        return errorGradient;
+    }
+
+    private double ActivationFunction(double dotProduct)
     {
         switch (activationFunction)
         {
             case "Linear":
-                return Linear(dotProduct);
+                return dotProduct;
             case "ReLU":
                 return ReLU(dotProduct);
+            case "LeakyReLU":
+                return LeakyReLU(dotProduct);
             case "Sigmoid":
                 return Sigmoid(dotProduct);
             case "Step":
                 return Step(dotProduct);
             case "TanH":
                 return TanH(dotProduct);
+            default:
+                Debug.LogError("Unknown activation function used!");
+                return 0;
+        }
+    }
+
+    private double ActivationDerivative(double dotProduct)
+    {
+        switch (activationFunction)
+        {
+            case "Linear":
+                return 1; // is always 1
+            case "ReLU":
+                return ReLUDeri(dotProduct);
+            case "LeakyReLU":
+                return LeakyReLUDeri(dotProduct);
+            case "Sigmoid":
+                return SigmoidDeri(dotProduct);
+            case "Step":
+                return SigmoidDeri(dotProduct); // should work
+            case "TanH":
+                return TanHDeri(dotProduct);
             default:
                 Debug.LogError("Unknown activation function used!");
                 return 0;
@@ -87,21 +197,77 @@ public class Neuron
 
     private double Sigmoid(double value)
     {
-        return 1.0f / (1.0f + (double)System.Math.Exp(-value));
+        return 1.0f / (1.0f + System.Math.Exp(-value));
+    }
+
+    private double SigmoidDeri(double value)
+    {
+        return Sigmoid(value) * (1.0f - Sigmoid(value));
     }
 
     private double TanH(double value)
     {
-        return 2.0f / (1.0f + (double)System.Math.Exp(-2.0f * value)) - 1.0f;
+        return 2.0f / (1.0f + System.Math.Exp(-2.0f * value)) - 1.0f;
     }
 
-    private double ReLU(double x)
+    private double TanHDeri(double value)
     {
-        return System.Math.Max(0, x); // x < 0 ? 0 : x;
+        return 1 - System.Math.Exp(value);
     }
 
-    private double Linear(double value)
+    private double ReLU(double value)
     {
-        return value;
+        return System.Math.Max(0, value); // value < 0 ? 0 : value;
+    }
+
+    private double LeakyReLU(double value)
+    {
+        if (value > 0)
+        {
+            return value;
+        }
+        else
+        {
+            return value * 0.01;
+        }
+    }
+
+    private double ReLUDeri(double value)
+    {
+        if (value > 0)
+        {
+            return 1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    private double LeakyReLUDeri(double value)
+    {
+        if (value > 0)
+        {
+            return 1;
+        }
+        else
+        {
+            return 0.01;
+        }
+    }
+    
+    public static float NextGaussian()
+    {
+        float v1, v2, s;
+        do
+        {
+            v1 = Random.Range(-1.0f, 1.0f);
+            v2 = Random.Range(-1.0f, 1.0f);
+            s = v1 * v1 + v2 * v2;
+        } while (s >= 1.0f || s == 0f);
+
+        s = Mathf.Sqrt((-2.0f * Mathf.Log(s)) / s);
+
+        return v1 * s / 10;
     }
 }

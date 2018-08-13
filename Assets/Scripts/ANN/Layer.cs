@@ -6,15 +6,20 @@ public class Layer {
 
     public List<Neuron> neurons = new List<Neuron>();
 
-    public Layer(int numberOfNeurons, int numberOfInputsPerNeuron, string activationFunctionName, bool visualizeNetwork = false)
+    public Layer(int numberOfNeurons, int numberOfInputsPerNeuron, string activationFunctionName, DebugNeuronSpawner debugNeuronSpawner)
     {
+        if (debugNeuronSpawner != null)
+        {
+            debugNeuronSpawner.addLayer();
+        }
         for (int i = 0; i < numberOfNeurons; i++)
         {
-            neurons.Add(new Neuron(numberOfInputsPerNeuron, activationFunctionName));
-            if (visualizeNetwork == true)
+            GameObject debugNeuron = null;
+            if (debugNeuronSpawner != null)
             {
-                Debug.Log("Erstelle " + (i + 1) + " von " + numberOfNeurons);
+                debugNeuron = debugNeuronSpawner.addNeuron(i, numberOfNeurons, numberOfInputsPerNeuron);
             }
+            neurons.Add(new Neuron(numberOfInputsPerNeuron, numberOfNeurons, activationFunctionName, debugNeuron));
         }
     }
 }

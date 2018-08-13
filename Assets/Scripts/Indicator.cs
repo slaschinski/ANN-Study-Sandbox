@@ -17,7 +17,7 @@ public class Indicator : MonoBehaviour {
 	
 	// Update is called once per frame
 	void Update () {
-        if (brain.maxQIndexX == qId || brain.maxQIndexZ == qId)
+        if (brain.maxQIndex == qId)
         {
             rend.material.color = Color.yellow;
         } else
