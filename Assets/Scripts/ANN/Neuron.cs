@@ -20,9 +20,9 @@ public class Neuron
 
         for (int i = 0; i < numberOfInputs; i++)
         {
-            weights.Add(Random.Range(-1.0f, 1.0f));
+            //weights.Add(Random.Range(-0.1f, 0.1f));
             //weights.Add(Random.Range(layerSize, numberOfInputs) * Mathf.Sqrt(2.0f / numberOfInputs));
-            //weights.Add(NextGaussian());
+            weights.Add(NextGaussian());
         }
         bias = Random.Range(-0.1f, 0.1f);
 
@@ -142,6 +142,15 @@ public class Neuron
     public double CalculateErrorGradient(double error)
     {
         errorGradient = ActivationDerivative(dotProduct) * error;
+        if (errorGradient > 1.0d)
+        {
+            //Debug.LogWarning("Gradient clipped to 1 - was at " + errorGradient);
+            errorGradient = 1.0d;
+        } else if (errorGradient < -1.0d)
+        {
+            //Debug.LogWarning("Gradient clipped to -1 - was at " + errorGradient);
+            errorGradient = -1.0d;
+        }
         return errorGradient;
     }
 
@@ -197,17 +206,17 @@ public class Neuron
 
     private double Sigmoid(double value)
     {
-        return 1.0f / (1.0f + System.Math.Exp(-value));
+        return 1.0d / (1.0d + System.Math.Exp(-value));
     }
 
     private double SigmoidDeri(double value)
     {
-        return Sigmoid(value) * (1.0f - Sigmoid(value));
+        return Sigmoid(value) * (1.0d - Sigmoid(value));
     }
 
     private double TanH(double value)
     {
-        return 2.0f / (1.0f + System.Math.Exp(-2.0f * value)) - 1.0f;
+        return 2.0d / (1.0d + System.Math.Exp(-2.0d * value)) - 1.0d;
     }
 
     private double TanHDeri(double value)
@@ -261,13 +270,13 @@ public class Neuron
         float v1, v2, s;
         do
         {
-            v1 = Random.Range(-1.0f, 1.0f);
-            v2 = Random.Range(-1.0f, 1.0f);
+            v1 = 2.0f * Random.Range(-1.0f, 1.0f);
+            v2 = 2.0f * Random.Range(-1.0f, 1.0f);
             s = v1 * v1 + v2 * v2;
         } while (s >= 1.0f || s == 0f);
 
         s = Mathf.Sqrt((-2.0f * Mathf.Log(s)) / s);
 
-        return v1 * s / 10;
+        return v1 * s;
     }
 }

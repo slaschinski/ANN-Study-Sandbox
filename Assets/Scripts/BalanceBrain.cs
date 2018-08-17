@@ -33,20 +33,19 @@ public class BalanceBrain : MonoBehaviour {
 
     ANN ann;
 
-    float reward = 0.0f;
     List<Replay> replayMemory = new List<Replay>();
     int mCapacity = 10000;
 
-    float discount = 0.99f;
-    float exploreRate = 50.0f;
+    float discount = 0.95f;
+    float exploreRate = 100.0f;
     float minExploreRate = 0.01f;
-    float exploreDecay = 0.9995f;
+    float exploreDecay = 0.05f;
     int exploreDuration = 10;
     int exploreDurationLeft;
     int exploreDirection;
-    float learningRate = 0.1f;
+    float learningRate = 0.0001f;
     float learningRateDecay = 0.999f;
-    float weightsDecay = 0.003f;
+    float weightsDecay = 0.000001f;
 
     Vector3 ballStartPos;
     int failCount = 0;
@@ -55,7 +54,6 @@ public class BalanceBrain : MonoBehaviour {
 
     float timer = 0;
     float maxBalanceTime = 0;
-    float totalReward = 0;
 
 
     List<double> qs = new List<double>();
@@ -65,38 +63,40 @@ public class BalanceBrain : MonoBehaviour {
     private float averageBalanceTime;
 
     // Use this for initialization
-    void Start () {
+    void Start ()
+    {
         ann = new ANN(3, learningRate, learningRateDecay, weightsDecay, neuronSpawner);
         ann.AddLayer(15, "LeakyReLU");
         ann.AddLayer(25, "LeakyReLU");
         ann.AddLayer(15, "LeakyReLU");
         ann.AddLayer(2, "Linear");
+        //ann.loadBrain();
 
-        /*
+
         List<double> target = new List<double>();
         target.Add(0.1f); target.Add(-0.1f);
         List<double> input = new List<double>();
-        input.Add(0.0f); input.Add(-0.2f); input.Add(0.0f);
+        input.Add(0.0f); input.Add(0.5f); input.Add(0.0f);
         ann.Train(input, target);
         input.Clear();
-        input.Add(0.0f); input.Add(0.0f); input.Add(0.2f);
+        input.Add(0.0f); input.Add(0.0f); input.Add(0.5f);
         ann.Train(input, target);
         input.Clear();
-        input.Add(0.0f); input.Add(-0.2f); input.Add(0.2f);
+        input.Add(0.0f); input.Add(0.5f); input.Add(0.5f);
         ann.Train(input, target);
 
         target.Clear();
         target.Add(-0.1f); target.Add(0.1f);
         input.Clear();
-        input.Add(0.0f); input.Add(0.2f); input.Add(0.0f);
+        input.Add(0.0f); input.Add(-0.5f); input.Add(0.0f);
         ann.Train(input, target);
         input.Clear();
-        input.Add(0.0f); input.Add(0.0f); input.Add(-0.2f);
+        input.Add(0.0f); input.Add(0.0f); input.Add(-0.5f);
         ann.Train(input, target);
         input.Clear();
-        input.Add(0.0f); input.Add(0.2f); input.Add(-0.2f);
+        input.Add(0.0f); input.Add(0.5f); input.Add(-0.5f);
         ann.Train(input, target);
-        */
+
 
         ballStartPos = ball.transform.position;
         Time.timeScale = 5.0f;
@@ -115,7 +115,7 @@ public class BalanceBrain : MonoBehaviour {
         timer += Time.deltaTime;
         List<double> states = new List<double>();
         states.Add(this.transform.rotation.z * 10);
-        states.Add(ball.transform.position.x);
+        states.Add(ball.transform.position.x / 2.5f);
         states.Add(ball.GetComponent<Rigidbody>().velocity.x / 4.0f);
         
         qs = ann.Predict(states);
@@ -136,6 +136,7 @@ public class BalanceBrain : MonoBehaviour {
             transform.Rotate(Vector3.forward, -tiltSpeed); // * (float)qs[maxQIndex]);
         }
 
+        float reward = 0.0f;
         if (ball.GetComponent<BallState>().dropped)
         {
             reward = -1.0f; // * (Mathf.Sqrt(Mathf.Pow(ball.GetComponent<Rigidbody>().angularVelocity.z, 2.0f)) / 4.0f);
@@ -144,9 +145,8 @@ public class BalanceBrain : MonoBehaviour {
         {
             reward = 0.1f; // - Mathf.Sqrt(Mathf.Pow(ball.transform.position.x, 2.0f));
         }
-        totalReward += reward;
 
-        if (maxQIndex == -1)
+        if (maxQIndex != -1)
         {
             Replay lastMemory = new Replay(states[0],
                                            states[1],
@@ -162,11 +162,11 @@ public class BalanceBrain : MonoBehaviour {
             replayMemory.Add(lastMemory);
         }
 
-        if (ball.GetComponent<BallState>().dropped || replayMemory.Count > 100)
+        if (ball.GetComponent<BallState>().dropped || replayMemory.Count > 10000)
         {
             if (exploreRate > minExploreRate)
             {
-                exploreRate *= exploreDecay;
+                exploreRate -= exploreDecay;
             }
 
             /*int batchSize = 32;
@@ -205,7 +205,7 @@ public class BalanceBrain : MonoBehaviour {
                     List<double> toutputsNext = new List<double>();
                     toutputsNext = ann.Predict(replayMemory[i + 1].states);
                     double maxQNext = toutputsNext.Max();
-                    feedback = (replayMemory[i].reward + discount * maxQNext);
+                    feedback = (replayMemory[i].reward + (discount * maxQNext));
                 }
 
                 List<double> toutputsNow = ann.Predict(replayMemory[i].states);
@@ -216,7 +216,9 @@ public class BalanceBrain : MonoBehaviour {
                 // thisQ = thisQ + learnRate * [thisReward + discount * nextQMax - thisQ];
                 //toutputsOld[action] = 0.5f * Mathf.Pow((float)(feedback - maxQOld), 2.0f);
                 //toutputsNow[actionNow] += feedback - toutputsNow[actionNow];
+                //toutputsNow[actionNow] += feedback;
                 toutputsNow[actionNow] = feedback;
+
                 ann.UpdateWeights(toutputsNowOld, toutputsNow);
                 //batchInputs.Add(replayMemory[i].states);
                 //batchOutputs.Add(toutputsNow);
@@ -244,12 +246,12 @@ public class BalanceBrain : MonoBehaviour {
                 averageBalanceTime /= balanceTimes.Count;
 
                 timer = 0;
-                totalReward = 0;
 
                 failCount++;
             }
             ResetState();
             replayMemory.Clear();
+            ann.saveBrain();
         }
     }
 
@@ -268,7 +270,7 @@ public class BalanceBrain : MonoBehaviour {
         GUI.Label(new Rect(10, 125, 350, 25), "Average Balance: " + averageBalanceTime, guiStyle);
         GUI.Box(new Rect(0, 150, 350, 75), "Input", guiStyle);
         GUI.Label(new Rect(10, 175, 350, 25), "Plane Z: " + this.transform.rotation.z * 10, guiStyle);
-        GUI.Label(new Rect(10, 200, 350, 25), "Ball Pos X: " + ball.transform.position.x, guiStyle);
+        GUI.Label(new Rect(10, 200, 350, 25), "Ball Pos X: " + ball.transform.position.x / 2.5f, guiStyle);
         GUI.Label(new Rect(10, 225, 350, 25), "Ball AVel Z: " + ball.GetComponent<Rigidbody>().velocity.x / 4.0f, guiStyle);
         GUI.Box(new Rect(0, 250, 350, 50), "Output", guiStyle);
 

@@ -103,6 +103,7 @@ public class ANN {
         UpdateWeights(outputs, desiredOutputValues);
 
         alpha *= alphaDecay;
+        lambda *= alphaDecay;
 
         return outputs;
     }
@@ -177,7 +178,7 @@ public class ANN {
                     // calculate the error for one neuron
                     double error = desiredOutputValues[j] - outputs[j];
                     // calculate the error gradient
-                    layers[i].neurons[j].CalculateErrorGradient(error);
+                    double errorGradient = layers[i].neurons[j].CalculateErrorGradient(error);
                 }
                 // neuron is at any other layer
                 else
@@ -189,7 +190,7 @@ public class ANN {
                         errorGradSum += layers[i + 1].neurons[p].getErrorGradient() * layers[i + 1].neurons[p].getWeights()[j];
                     }
                     // caluclate the error gradient with regards to the error gradients of the connected neurons
-                    layers[i].neurons[j].CalculateErrorGradient(errorGradSum);
+                    double errorGradient = layers[i].neurons[j].CalculateErrorGradient(errorGradSum);
                 }
 
                 // update all weights of this neuron regarding the calculated gradients
@@ -207,17 +208,88 @@ public class ANN {
                     // neuron is at any other layer
                     else
                     {*/
-                    weights[k] -= lambda * weights[k]; // L2 regularization
+                    //weights[k] -= Mathf.Sign((float)weights[k]) * lambda;
+                    weights[k] -= Mathf.Sign((float)weights[k]) * lambda * weights[k] * weights[k];
+                    //weights[k] -= lambda * weights[k]; // L2 regularization
                     weights[k] += alpha * layers[i].neurons[j].getErrorGradient() * layers[i].neurons[j].getInputs()[k];
                     //}
                 }
                 layers[i].neurons[j].setWeights(weights);
 
                 double bias = layers[i].neurons[j].getBias();
-                bias -= lambda * bias; // L2 regularization
+                //bias -= Mathf.Sign((float)bias) * lambda;
+                bias -= Mathf.Sign((float)bias) * lambda * bias * bias;
+                //bias -= lambda * bias; // L2 regularization
                 bias += alpha * layers[i].neurons[j].getErrorGradient();
                 layers[i].neurons[j].setBias(bias);
             }
         }
+    }
+
+    private XDocument brainToXml()
+    {
+        XElement brainXml = new XElement("Brain");
+        brainXml.Add(new XElement("Inputs", numInputs));
+        XDocument brainDoc = new XDocument(new XDeclaration("1.0", "UTF-16", null), brainXml);
+
+        for (int i = 0; i < layers.Count; i++)
+        {
+            XElement layerXml = new XElement("Layer");
+            layerXml.Add(new XElement("LayerID", i + 1));
+            brainXml.Add(layerXml);
+
+            for (int j = 0; j < layers[i].neurons.Count; j++)
+            {
+                XElement neuronXml = new XElement("Neuron");
+                layerXml.Add(neuronXml);
+
+                List<double> weights = layers[i].neurons[j].getWeights();
+                for (int k = 0; k < weights.Count; k++)
+                {
+                    XElement weightXml = new XElement("Weight", weights[k]);
+                    neuronXml.Add(weightXml);
+                }
+                XElement biasXml = new XElement("Bias", layers[i].neurons[j].getBias());
+                neuronXml.Add(biasXml);
+            }
+        }
+
+        return brainDoc;
+    }
+
+    private void XmlToBrain(XDocument brainDoc)
+    {
+        XElement brainXml = brainDoc.Element("Brain");
+        IEnumerable<XElement> layersEnum = brainXml.Elements("Layer");
+        int i = 0;
+        foreach (XElement layerElement in layersEnum)
+        {
+            IEnumerable<XElement> neuronsEnum = layerElement.Elements("Neuron");
+            int j = 0;
+            foreach (XElement neuronElement in neuronsEnum)
+            {
+                IEnumerable<XElement> weightsEnum = neuronElement.Elements("Weight");
+                List<double> newWeights = new List<double>();
+                foreach (XElement weightElement in weightsEnum)
+                {
+                    newWeights.Add(double.Parse(weightElement.Value));
+                }
+                layers[i].neurons[j].setWeights(newWeights);
+                layers[i].neurons[j].setBias(double.Parse(neuronElement.Element("Bias").Value));
+                j++;
+            }
+            i++;
+        }
+    }
+
+    public void saveBrain()
+    {
+        brainToXml().Save("D:\\savedBrain.xml");
+    }
+
+    public void loadBrain()
+    {
+        XDocument xdocument = XDocument.Load("D:\\loadBrain.xml");
+        XmlToBrain(xdocument);
     }
 }
