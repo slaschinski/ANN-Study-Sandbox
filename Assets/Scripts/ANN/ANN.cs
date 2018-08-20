@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.Xml.Linq;
 using UnityEngine;
 
+/// <summary>
+/// The neural network class
+/// Combines neurons into layers and coordinates them to form a neural network
+/// Handles back-propagation and is able to save the present state into an xml file
+/// </summary>
 public class ANN {
 
     private double alpha;
@@ -100,7 +105,10 @@ public class ANN {
     {
         List<double> outputs = Predict(inputValues);
 
-        UpdateWeights(outputs, desiredOutputValues);
+        calculateGradients(outputs, desiredOutputValues);
+        calculateDeltas(outputs, desiredOutputValues);
+
+        UpdateWeights();
 
         alpha *= alphaDecay;
         lambda *= alphaDecay;
@@ -108,64 +116,43 @@ public class ANN {
         return outputs;
     }
 
-    /*public void TrainBatch(List<List<double>> inputValues, List<List<double>> desiredOutputValues)
+    public void TrainBatch(List<List<double>> inputValues, List<List<double>> desiredOutputValues)
     {
-        /*
-        List<List<double>> errorsList = new List<List<double>>();
-        List<List<double>> outputsList = new List<List<double>>();
-
+        bool sumDeltas = false;
         for (int i = 0; i < inputValues.Count; i++)
         {
-            List<double> errors = new List<double>();
+            if (i > 0)
+            {
+                sumDeltas = true;
+            }
             List<double> outputs = Predict(inputValues[i]);
-            for (int j = 0; j < outputs.Count; j++)
-            {
-                // mean squared error
-                //errors.Add(Mathf.Pow((float)(desiredOutputValues[i][j] - outputs[j]), 2));
-                // mean error
-                errors.Add(desiredOutputValues[i][j] - outputs[j]);
-            }
-            errorsList.Add(errors);
-            outputsList.Add(outputs);
+
+            calculateGradients(outputs, desiredOutputValues[i]);
+            calculateDeltas(outputs, desiredOutputValues[i], sumDeltas);
         }
 
-        List<double> meanErrors = new List<double>();
-        List<double> meanOutputs = new List<double>();
-        for (int i = 0; i < errorsList[0].Count; i++)
-        {
-            meanErrors.Add(0);
-            meanOutputs.Add(0);
-        }
+        UpdateWeights();
 
-        for (int i = 0; i < errorsList.Count; i++)
-        {
-            for (int j = 0; j < errorsList[i].Count; j++)
-            {
-                meanErrors[j] += errorsList[i][j];
-                meanOutputs[j] += outputsList[i][j];
-            }
-        }
+        alpha *= alphaDecay;
+        lambda *= alphaDecay;
+    }
 
-        for (int i = 0; i < meanErrors.Count; i++)
-        {
-            meanOutputs[i] /= errorsList.Count;
-            meanErrors[i] /= errorsList.Count;
-            meanErrors[i] += meanOutputs[i];
-        }
-
-        UpdateWeights(meanOutputs, meanErrors);*/
-
-        /*
-        for (int i = 0; i < inputValues.Count; i++)
-        {
-            Train(inputValues[i], desiredOutputValues[i]);
-        }
-        
-    }*/
-
-    public void UpdateWeights(List<double> outputs, List<double> desiredOutputValues)
+    public void UpdateWeights()
     {
 
+        // step through every layer
+        for (int i = 0; i < layers.Count; i++)
+        {
+            // step through every neuron in this layer
+            for (int j = 0; j < layers[i].neurons.Count; j++)
+            {
+                layers[i].neurons[j].ApplyDeltas(lambda);
+            }
+        }
+    }
+
+    private void calculateGradients(List<double> outputs, List<double> desiredOutputValues)
+    {
         // step through every layer BACKWARDS
         for (int i = layers.Count - 1; i >= 0; i--)
         {
@@ -178,7 +165,7 @@ public class ANN {
                     // calculate the error for one neuron
                     double error = desiredOutputValues[j] - outputs[j];
                     // calculate the error gradient
-                    double errorGradient = layers[i].neurons[j].CalculateErrorGradient(error);
+                    layers[i].neurons[j].CalculateErrorGradient(error);
                 }
                 // neuron is at any other layer
                 else
@@ -187,41 +174,60 @@ public class ANN {
                     for (int p = 0; p < layers[i + 1].neurons.Count; p++)
                     {
                         // sum up the error gradients of -every neuron at the following layer- multiplied by -the weight for this neuron-
-                        errorGradSum += layers[i + 1].neurons[p].getErrorGradient() * layers[i + 1].neurons[p].getWeights()[j];
+                        errorGradSum += layers[i + 1].neurons[p].getErrorGradient() * layers[i + 1].neurons[p].getWeight(j);
                     }
                     // caluclate the error gradient with regards to the error gradients of the connected neurons
-                    double errorGradient = layers[i].neurons[j].CalculateErrorGradient(errorGradSum);
+                    layers[i].neurons[j].CalculateErrorGradient(errorGradSum);
                 }
+            }
+        }
+    }
 
-                // update all weights of this neuron regarding the calculated gradients
-                List<double> weights = new List<double>(layers[i].neurons[j].getWeights());
-                for (int k = 0; k < layers[i].neurons[j].getInputs().Count; k++)
+    public void calculateDeltas(List<double> outputs, List<double> desiredOutputValues, bool sumDeltas = false)
+    {
+        // step through every layer
+        for (int i = 0; i < layers.Count; i++)
+        {
+            // step through every neuron in this layer
+            for (int j = 0; j < layers[i].neurons.Count; j++)
+            {
+                // update all deltas of this neuron regarding the calculated gradients
+                List<double> deltas = new List<double>();
+                for (int k = 0; k < layers[i].neurons[j].getWeightCount(); k++)
                 {
-                    /*// neuron is at the output layer
+                    // neuron is at the output layer
                     if (i == (layers.Count - 1))
                     {
                         // calculate the error for one neuron
                         double error = desiredOutputValues[j] - outputs[j];
+                        double delta = alpha * layers[i].neurons[j].getInput(k) * error;
+                        //double delta = alpha * layers[i].neurons[j].getErrorGradient();
+                        //double delta = alpha * layers[i].neurons[j].getErrorGradient() * layers[i].neurons[j].getInput(k);
 
-                        weights[k] += alpha * layers[i].neurons[j].getInputs()[k] * error;
+                        deltas.Add(delta);
                     }
                     // neuron is at any other layer
                     else
-                    {*/
-                    //weights[k] -= Mathf.Sign((float)weights[k]) * lambda;
-                    weights[k] -= Mathf.Sign((float)weights[k]) * lambda * weights[k] * weights[k];
-                    //weights[k] -= lambda * weights[k]; // L2 regularization
-                    weights[k] += alpha * layers[i].neurons[j].getErrorGradient() * layers[i].neurons[j].getInputs()[k];
-                    //}
+                    {
+                        double delta = alpha * layers[i].neurons[j].getErrorGradient() * layers[i].neurons[j].getInput(k);
+                        deltas.Add(delta);
+                    }
                 }
-                layers[i].neurons[j].setWeights(weights);
 
-                double bias = layers[i].neurons[j].getBias();
-                //bias -= Mathf.Sign((float)bias) * lambda;
-                bias -= Mathf.Sign((float)bias) * lambda * bias * bias;
-                //bias -= lambda * bias; // L2 regularization
-                bias += alpha * layers[i].neurons[j].getErrorGradient();
-                layers[i].neurons[j].setBias(bias);
+                double biasDelta = alpha * layers[i].neurons[j].getErrorGradient();
+
+                if (!sumDeltas)
+                {
+                    layers[i].neurons[j].setDeltas(deltas);
+                    layers[i].neurons[j].setBiasDelta(biasDelta);
+                } else
+                {
+                    layers[i].neurons[j].addToDeltas(deltas);
+                    layers[i].neurons[j].addToBiasDelta(biasDelta);
+                }
+
+
+
             }
         }
     }
