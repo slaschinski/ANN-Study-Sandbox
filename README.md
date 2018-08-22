@@ -1,4 +1,4 @@
-# ANN-Study-Sandbox
+# ANN Study Sandbox
 A little Unity based sandbox with an ANN (Artificial Neural Network) implemented in C# for experimentation purposes
 
 ## Goal of this project
