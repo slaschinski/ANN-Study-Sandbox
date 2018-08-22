@@ -13,7 +13,7 @@ PlayerSettings:
   useOnDemandResources: 0
   accelerometerFrequency: 60
   companyName: DefaultCompany
-  productName: ANN Balancing
+  productName: ANN Study Sandbox
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b: 0.1254902, a: 1}
@@ -664,7 +664,7 @@ PlayerSettings:
   facebookSdkVersion: 7.9.4
   apiCompatibilityLevel: 2
   cloudProjectId: 15114533-32c4-45b0-82f5-e386930c46cd
-  projectName: ANN Balancing
+  projectName: ANN Study Sandbox
   organizationId: sven-laschinski
   cloudEnabled: 0
   enableNativePlatformBackendsForNewInputSystem: 0
