@@ -227,7 +227,7 @@ public class Neuron
         List<double> newWeights = new List<double>();
         for (int i = 0; i < weights.Count; i++)
         {
-            newWeights.Add(weights[i] += deltas[i]);
+            newWeights.Add(weights[i] + deltas[i]);
         }
         setWeights(newWeights);
 
